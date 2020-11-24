@@ -1,7 +1,7 @@
 # ADS01SPI
 
-## Aquisição e interpretação de sinais por meio de conversor AD do tipo Sigma-Delta e protocolo SPI
+## Acquisition and interpretation of signals with ADC Sigma-Delta and communication protocol SPI
 
 ### Requirements
 
-- ´´´´digitalFastWrite´´´
+- `digitalWriteFast`
