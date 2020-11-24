@@ -1,7 +1,5 @@
 /*
 
-BEALE CODE
-
 Interface between Arduino DM board and Linear Tech LTC2440 24-bit ADC
 Oct. 24 2012 John Beale
 
@@ -41,29 +39,24 @@ NOTE: I strongly recommend wiring Pin 7 to +5 VDC to start - this will give you 
 // LiquidCrystal
 LiquidCrystal lcd(2, 3, 4, 5, 6, 7);
 
-const int nsamples = 1; // how many ADC readings to average together or CPS setting. nsamples =  10 yeilds (880/10) or 110 samples per second.
-
 // SPI_CLOCK_DIV16 gives me a 1.0 MHz SPI clock, with 16 MHz crystal on Arduino
 
 void setup() {
 
   Serial.begin(9600); // set up serial comm to PC at this baud rate
   
-	lcd.begin(16, 2);
-	lcd.print("quero um abraço");
-	lcd.setCursor(0, 1);
-	
-	pinMode(VSELECT, INPUT);
+  lcd.begin(16, 2);
+  lcd.print("quero um abraço");
+  lcd.setCursor(0, 1);
+  
+  pinMode(VSELECT, INPUT);
   pinMode(SLAVESELECT, OUTPUT);
-  pinMode(BUSYPIN, INPUT);
   digitalWriteFast(SLAVESELECT,LOW); // take the SS pin low to select the chip
   delayMicroseconds(1);
   digitalWriteFast(SLAVESELECT,HIGH); // take the SS pin high to start new ADC conversion
-  
-  SPI.begin(); // initialize SPI, covering MOSI,MISO,SCK signals
-  SPI.setBitOrder(MSBFIRST); // data is clocked in MSB first
-  SPI.setDataMode(SPI_MODE0); // SCLK idle low (CPOL=0), MOSI read on rising edge (CPHI=0)
-  SPI.setClockDivider(SPI_CLOCK_DIV16); // set SPI clock at 1 MHz. Arduino xtal = 16 MHz, LTC2440 max = 20 MHz
+
+  //SPI.begin();
+  SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
   
   for (int i=0;i<2;i++) { // throw away the first few readings, which seem to be way off
     SpiRead();
@@ -75,43 +68,20 @@ void setup() {
 // acquire 'nsamples' readings, convert to units of volts, and send out on serial port
 
 void loop() {
-	
-  int i;
-  float uVolts; // average reading in microvolts
-  float datSum; // accumulated sum of input values
-  float sMax;
-  float sMin;
-  long n; // count of how many readings so far
-  float x,mean,delta,sumsq;
   
-  sMax = -VREF; // set max to minimum possible reading
-  sMin = VREF; // set min to max possible reading
-  sumsq = 0; // initialize running squared sum of differences
-  n = 0; // have not made any ADC readings yet
-  datSum = 0; // accumulated sum of readings starts at zero
-
-  for (i=0; i<nsamples; i++) {
-    x = SpiRead(); /// ORIGINAL DATA?
-    //Serial.println(x, 7);
-    datSum += x;
-    if (x > sMax) sMax = x;
-    if (x < sMin) sMin = x;
-    n++;
-    delay(198);
-  } // end for (i..)
+  SpiRead(); /// ORIGINAL DATA?
   
-  uVolts = datSum / n; //Average over N modified original-works
-  
-  Serial.println(uVolts,7); //original code included...Serial.print(uVolts,6);
-	lcd.clear();
-	lcd.home();
-	lcd.print("VOLTAGEM");
-	lcd.setCursor(0, 1);
-	lcd.print(uVolts, digitalReadFast(VSELECT) ? 5 : 7);
+  //Serial.println(uVolts,7); //original code included...Serial.print(uVolts,6);
+  /* lcd.clear();
+  lcd.home();
+  lcd.print("VOLTAGEM");
+  lcd.setCursor(0, 1);
+  lcd.print(uVolts, digitalReadFast(VSELECT) ? 5 : 7); */
 } // end main loop
 
+
 // =================================================================
-// SpiRead() -- read 4 bytes from LTC2440 chip via SPI, return Volts
+// SpiRead() -- read 2 bytes
 // =================================================================
 
 float SpiRead(void) {
@@ -139,40 +109,36 @@ float SpiRead(void) {
   
   */
   
-  float GAIN = 2*(digitalReadFast(VSELECT) ? 20.60784314 : 4.96240602);      
-	// Set GAIN to 1 to start - this varible is the ADC
+  float GAIN = 2*(digitalReadFast(VSELECT) ? 20 : 4);      
+  // Set GAIN to 1 to start - this varible is the ADC
   // multiplacation factor of the ADC output number
   
   float OFFSET = 0; //Offset of the output from zero
   
-  while (digitalReadFast(BUSYPIN)==HIGH) {} // wait until ADC result is ready
-  
   digitalWriteFast(SLAVESELECT,LOW); // take the SS pin low to select the chip
-  delayMicroseconds(1); // probably not needed, only need 25 nsec delay
+  //delayMicroseconds(1); // probably not needed, only need 25 nsec delay
   
-  b = SPI.transfer(0xff); // B3
-  if ((b & 0x20) ==0) sig=1; // is input negative ?
-  b &=0x1f; // discard bits 25..31
-  result = b; //org code..."result = b";
-  result <<= 8;
-  b = SPI.transfer(0xff); // B2
+  b = SPI.transfer(0); // B3
+  sig = (b & 0x10) == 0x10;
+  b = b & 0xf;
+  result = b;
+
+  b = SPI.transfer(0); // B3
+  result = result << 8;
+
   result |= b;
-  result = result<<8;
-  b = SPI.transfer(0xff); // B1
-  result |= b;
-  result = result<<8;
-  b = SPI.transfer(0xff); // B0
-  result |= b;
+  if (sig) {
+    result = result - 1;
+    result = ~result;
+    result = result & 0b111111111111;
+    result = result*(-1);
+  }
   
   digitalWriteFast(SLAVESELECT,HIGH); // take the SS pin high to bring MISO to hi-Z and start new conversion
-
-  //Serial.println(result);
-  //Serial.println(sig);
   
-  if (sig) result |= 0xf0000000; // if input is negative, insert sign bit (0xf0.. or 0xe0... ?)
+  //if (sig) result |= 0xf0000000; // if input is negative, insert sign bit (0xf0.. or 0xe0... ?)
   v = result;
-  v = v / 16.0; // scale result down , last 4 bits are "sub-LSBs"
-  v = v * VREF / (2*(16777216)); // ORIGINAL CODE: +Vfullscale = +Vref/2, max scale (2^24 = 16777216)
+  v = (v * 5 / 4096)*2; // scale result down , last 4 bits are "sub-LSBs"
   
   /*
   THE LINES BELOW ALLOW CALIBRATION OF THE ADC SERIAL OUTPUT VALUE
@@ -184,8 +150,7 @@ float SpiRead(void) {
   to fit your source equation.
   
   */
-  
-  v=v*GAIN + OFFSET;
+  Serial.println(v);
   return(v);
 
 }//END CODE HERE
