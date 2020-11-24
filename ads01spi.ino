@@ -39,7 +39,6 @@ NOTE: I strongly recommend wiring Pin 7 to +5 VDC to start - this will give you 
 // LiquidCrystal
 LiquidCrystal lcd(2, 3, 4, 5, 6, 7);
 
-// SPI_CLOCK_DIV16 gives me a 1.0 MHz SPI clock, with 16 MHz crystal on Arduino
 
 void setup() {
 
